@@ -641,16 +641,17 @@ class UnorderedMap {
   void erase(const const_iterator& erase_iter) {
     const Key& key = (*erase_iter).first;
     size_type hash_of_next = hasher((*std::next(erase_iter, 1)).first);
+    size_type hash_of_key = hasher(key);
     try {
       node_list.erase(erase_iter);
     } catch (...) {
       throw;
     }
-    if (hash_of_next == hasher(key)) {
+    if (hash_of_next == hash_of_key) {
       return;
     }
-    bucket_vec[hash_of_next % bucket_count] = bucket_vec[hasher(key) % bucket_count];
-    bucket_vec[hasher(key) % bucket_count] = node_list.end();
+    bucket_vec[hash_of_next % bucket_count] = bucket_vec[hash_of_key % bucket_count];
+    bucket_vec[hash_of_key % bucket_count] = node_list.end();
   }
   void erase(iterator start, iterator end) {
     iterator it = start;

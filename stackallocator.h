@@ -91,17 +91,11 @@ class Node : public BaseNode<T> {
  public:
   T object;
   Node() = default;
-  Node(const T& item) try : object(item) {}
-  catch (...) {
-    throw;
-  }
+  Node(const T& item) : object(item) {}
 };
 
 template <typename T, bool is_const>
 class ListIterator {
-
-  //  using base_node_pointer = std::conditional_t<is_const, const BaseNode<T>*, BaseNode<T>*>;
-  //  using node_pointer = std::conditional_t<is_const, const Node<T>*, Node<T>*>;
 
   using base_node_pointer = BaseNode<T>*;
   using node_pointer = Node<T>*;
@@ -170,7 +164,7 @@ class List {
   using NodeAllocTraits = AllocTraits::template rebind_traits<Node<T>>;
 
   mutable BaseNode<T> fake_node{&fake_node, &fake_node};
-  size_t _size;
+  size_t _size = 0;
   [[no_unique_address]] Alloc alloc;
   [[no_unique_address]] NodeAlloc node_alloc{alloc};
   NodeAllocTraits node_alloc_traits;
@@ -184,20 +178,12 @@ class List {
 
   Node<T>* create_node() {
     Node<T>* pointer = allocate_node();
-    try {
-      NodeAllocTraits::construct(node_alloc, pointer);
-    } catch (...) {
-      throw;
-    }
+    NodeAllocTraits::construct(node_alloc, pointer);
     return pointer;
   }
   Node<T>* create_node(const T& item) {
     Node<T>* pointer = allocate_node();
-    try {
-      NodeAllocTraits::construct(node_alloc, pointer, item);
-    } catch (...) {
-      throw;
-    }
+    NodeAllocTraits::construct(node_alloc, pointer, item);
     return pointer;
   }
 
@@ -239,83 +225,31 @@ class List {
 
   List() : _size(0) {}
   List(size_t n) : List() {
-    _size = n;
-    ConstructNodesWithoutValues(n);
-    iterator iter = begin();
-    try {
-      for (T &l_item : *this) {
-        AllocTraits::construct(alloc, &l_item);
-        iter++;
-      }
-    } catch (...) {
-      DestructNodes(--iter);
+    for (size_t i = 0; i < n; i++) {
+      emplace_back();
     }
   }
   List(size_t n, const T& item) :List() {
-    _size = n;
-    ConstructNodesWithoutValues(n);
-    iterator iter = begin();
-    try {
-      for (T &l_item : *this) {
-        AllocTraits::construct(alloc, &l_item, item);
-        iter++;
-      }
-    } catch (...) {
-      DestructNodes(--iter);
+    for (size_t i = 0; i < n; i++) {
+      push_back(*create_node(item));
     }
   }
   List(const Alloc& alloc) :  _size(0), alloc(alloc) {}
   List(size_t n, Alloc alloc) : List(alloc) {
-    _size = n;
-    ConstructNodesWithoutValues(n);
-    iterator iter = begin();
-    try {
-      for (T &l_item : *this) {
-        AllocTraits::construct(alloc, &l_item);
-        iter++;
-      }
-    } catch (...) {
-      DestructNodes(--iter);
+    for (size_t i = 0; i < n; i++) {
+      emplace_back();
     }
   }
   List(size_t n, const T& item, Alloc alloc) : List(alloc) {
-    _size = n;
-    ConstructNodesWithoutValues(n);
-    iterator iter = begin();
-    try {
-      for (T &l_item : *this) {
-        AllocTraits::construct(alloc, &l_item, item);
-        iter++;
-      }
-    } catch (...) {
-      DestructNodes(--iter);
+    for (size_t i = 0; i < n; i++) {
+      emplace_back(item);
     }
   }
   List(const List& other) : List(AllocTraits::select_on_container_copy_construction(other.alloc)) {
-    ConstructNodesWithoutValues(other.size());
-    iterator this_i = begin();
-    _size = other.size();
-    const_iterator other_i = other.begin();
-    try {
-      while (this_i != end()) {
-        AllocTraits::construct(alloc, this_i.operator->(), *other_i);
-        this_i++;
-        other_i++;
-      }
-    } catch (...) {
-      DestructNodes(--this_i);
+    for (auto& other_item : other) {
+      emplace_back(other_item);
     }
   }
-
-  //  template <typename A>
-  //  int getNum(A alloc) {
-  //    return alloc.getNum();
-  //  }
-  //  template <typename A>
-  //  std::shared_ptr<int>  getPtr(A alloc) {
-  //    return alloc.getPtr();
-  //  }
-
 
   List& operator=(const List& other) {
     if (&other == this) {
@@ -359,6 +293,10 @@ class List {
 
   size_t size() const{
     return _size;
+  }
+  template <typename ...Args>
+  void emplace_back(Args&&... args) {
+    emplace(end(), std::forward<Args>(args)...);
   }
   void push_back(const T& item) {
     insert(end(), item);
@@ -411,17 +349,23 @@ class List {
     return std::reverse_iterator<iterator>(begin());
   }
 
+  template <typename ...Args>
+  void emplace(const_iterator iter, Args&&... args) {
+    Node<T>* new_node = create_node(std::forward<Args>(args)...);
+    new_node->previous = iter.getNode()->previous;
+    new_node->next = iter.getNode();
+    new_node->previous->next = new_node;
+    new_node->next->previous = new_node;
+    _size++;
+  }
+
   void insert(const_iterator iter, const T& item) {
-    try {
-      Node<T>* new_node = create_node(item);
-      new_node->previous = iter.getNode()->previous;
-      new_node->next = iter.getNode();
-      new_node->previous->next = new_node;
-      new_node->next->previous = new_node;
-      _size++;
-    } catch (...) {
-      throw;
-    }
+    Node<T>* new_node = create_node(item);
+    new_node->previous = iter.getNode()->previous;
+    new_node->next = iter.getNode();
+    new_node->previous->next = new_node;
+    new_node->next->previous = new_node;
+    _size++;
   }
   void erase(const_iterator iter) {
     Node<T>* node_to_delete = static_cast<Node<T>*>(iter.getNode());
